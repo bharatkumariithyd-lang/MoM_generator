@@ -14,3 +14,4 @@ __pycache__/
 
 # Downloaded Whisper models cache
 models/
+streamlit.log
