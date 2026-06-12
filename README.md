@@ -14,14 +14,17 @@ Word document — automatically.
 | Step | What happens | Tool used |
 |------|--------------|-----------|
 | 1. Transcribe | The audio is converted to text **on your machine** (free, no API key). | `faster-whisper` |
-| 2. Speaker labels | A *basic* "Speaker 1 / Speaker 2" guess is added based on pauses. | (built-in heuristic) |
+| 2. Speaker labels | Either a quick guess from pauses, **or real voice recognition** that tells voices apart. | (heuristic) or `resemblyzer` |
 | 3. Structure | The transcript is sent to an LLM that extracts title, attendees, decisions, action items, etc. | `groq` (`llama-3.3-70b-versatile`) |
 | 4. Export | Everything is written into a formatted Word file. | `python-docx` |
 
-> **About speaker labels:** this is a rough guess based on silence between
-> sentences — it detects *turn changes*, not real voices. For accurate
-> "who said what", a dedicated diarization model (e.g. `pyannote.audio`) is
-> needed. See [Upgrading](#upgrading-real-speaker-diarization).
+> **Two ways to label speakers:**
+> - `--speakers pause` (default): a rough guess from silence gaps. Fast, but it
+>   only detects *turn changes* — it can't tell if two turns are the same person.
+> - `--speakers voice`: **real voice recognition** (Resemblyzer). It listens to
+>   the actual voices, so the same person gets the same label every time they
+>   speak. Needs the optional extras — see
+>   [Enabling real voice recognition](#enabling-real-voice-recognition).
 
 ---
 
@@ -67,7 +70,8 @@ The finished document appears in `output/meeting_MoM.docx`.
 | `--output` | Choose where to save the `.docx`. | `--output output/board.docx` |
 | `--model` | Whisper size: `tiny` `base` `small` `medium` `large-v3`. Bigger = more accurate but slower. | `--model small` |
 | `--language` | Force a language (else auto-detected). | `--language en` |
-| `--no-diarization` | Skip the speaker-labeling step. | `--no-diarization` |
+| `--speakers` | Speaker labels: `pause` (default), `voice` (real recognition), or `none`. | `--speakers voice` |
+| `--num-speakers` | (voice mode) How many people are talking. Omit to auto-detect. | `--num-speakers 3` |
 | `--save-transcript` | Also save the raw transcript as `.txt`. | `--save-transcript` |
 
 Example with several options:
@@ -91,11 +95,14 @@ Experiment/
 ├── project.py              # main entry point — run this
 ├── mom_generator/
 │   ├── __init__.py
-│   ├── transcriber.py      # Step 1+2: faster-whisper + basic speaker labels
+│   ├── transcriber.py      # Step 1: faster-whisper + basic (pause) speaker labels
+│   ├── diarizer.py         # Step 2 (optional): real voice recognition (Resemblyzer)
+│   ├── model_downloader.py # robustly fetches the Whisper model (mirror + retries)
 │   ├── mom_builder.py      # Step 3: Groq LLM -> structured minutes
 │   └── docx_exporter.py    # Step 4: write the .docx
 ├── .env.example            # template for your API key
-├── requirements.txt
+├── requirements.txt        # core dependencies
+├── requirements-voice.txt  # optional extras for --speakers voice
 ├── README.md
 └── output/                 # generated documents (created automatically)
 ```
@@ -113,10 +120,29 @@ Experiment/
 
 ---
 
-## Upgrading: real speaker diarization
+## Enabling real voice recognition
 
-The built-in speaker labeling is intentionally simple. To get accurate speaker
-identification, replace `assign_basic_speakers()` in
-`mom_generator/transcriber.py` with a [`pyannote.audio`](https://github.com/pyannote/pyannote-audio)
-pipeline (requires PyTorch and a free Hugging Face token), then map its speaker
-IDs onto the Whisper segments by timestamp.
+By default speakers are guessed from pauses. To tell voices apart for real — so
+the same person keeps the same label across the whole meeting — install the
+optional extras once:
+
+```bash
+pip install -r requirements-voice.txt
+pip install resemblyzer --no-deps
+```
+
+Then add `--speakers voice`:
+
+```bash
+python project.py meeting.mp3 --speakers voice
+# or, if you already know the head count:
+python project.py meeting.mp3 --speakers voice --num-speakers 3
+```
+
+Under the hood this uses [Resemblyzer](https://github.com/resemble-ai/Resemblyzer):
+it turns ~1.6s slices of audio into "voiceprints", clusters them so each cluster
+is one person, then matches those to the transcript by timestamp. The whole
+thing lives in `mom_generator/diarizer.py` — it's written to be read. It's free
+and runs locally (no API key, no Hugging Face token), just heavier because it
+uses PyTorch. For an even more accurate option, swap in
+[`pyannote.audio`](https://github.com/pyannote/pyannote-audio).

@@ -26,7 +26,9 @@ HOW TO USE
 
    Useful options:
        python project.py meeting.m4a --model small --output output/board.docx
-       python project.py meeting.wav --no-diarization
+       python project.py meeting.wav --speakers voice          (real voice recognition)
+       python project.py meeting.wav --speakers voice --num-speakers 3
+       python project.py meeting.wav --speakers none
        python project.py meeting.mp3 --language en
 
 The finished .docx lands in the "output/" folder by default.
@@ -83,9 +85,28 @@ def parse_arguments():
         help="Language code like 'en'. Omit to auto-detect.",
     )
     parser.add_argument(
+        "--speakers",
+        default="pause",
+        choices=["pause", "voice", "none"],
+        help=(
+            "How to label speakers: "
+            "'pause' = quick guess from silence gaps (fast, default); "
+            "'voice' = real voice recognition with Resemblyzer (slower, needs "
+            "the optional extras - see requirements-voice.txt); "
+            "'none' = no speaker labels."
+        ),
+    )
+    parser.add_argument(
+        "--num-speakers",
+        type=int,
+        default=None,
+        help="(voice mode only) How many people are talking. Omit to auto-detect.",
+    )
+    # Deprecated alias kept so old commands still work; same as --speakers none.
+    parser.add_argument(
         "--no-diarization",
         action="store_true",
-        help="Skip the basic speaker labeling step.",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--save-transcript",
@@ -158,12 +179,24 @@ def main():
     if not segments:
         sys.exit("ERROR: No speech was detected in the audio. Nothing to do.")
 
-    # --- Step 2: Basic speaker labels (optional) -------------------------
-    use_speakers = not args.no_diarization
-    if use_speakers:
+    # --- Step 2: Speaker labels (optional) -------------------------------
+    # --no-diarization is the old way to say "--speakers none".
+    speaker_method = "none" if args.no_diarization else args.speakers
+
+    if speaker_method == "voice":
+        # Real voice recognition: listen to the audio and group it by speaker.
+        from mom_generator.diarizer import diarize_audio, assign_voice_speakers
+        turns = diarize_audio(args.audio, num_speakers=args.num_speakers)
+        segments = assign_voice_speakers(segments, turns)
+        print("[project] Added speaker labels from real voice recognition.")
+        use_speakers = True
+    elif speaker_method == "pause":
         segments = assign_basic_speakers(segments)
         print("[project] Added approximate speaker labels "
               "(rough guess based on pauses).")
+        use_speakers = True
+    else:  # "none"
+        use_speakers = False
 
     transcript = format_transcript(segments, with_speakers=use_speakers)
 

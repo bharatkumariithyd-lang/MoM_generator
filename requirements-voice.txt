@@ -1,0 +1,20 @@
+# Optional extras for REAL voice-based speaker recognition (--speakers voice)
+# =========================================================================
+# These power mom_generator/diarizer.py, which listens to the actual voices
+# instead of guessing speaker changes from pauses. The install is heavier than
+# the core project because it pulls in PyTorch.
+#
+# Install in TWO steps (order matters — see the note below):
+#
+#     pip install -r requirements-voice.txt
+#     pip install resemblyzer --no-deps
+#
+# Why two steps?  Resemblyzer declares a dependency on "webrtcvad", which has no
+# prebuilt Windows wheel and needs a C++ compiler to build. We instead install
+# the drop-in "webrtcvad-wheels" (same import name, prebuilt), so we deliberately
+# install Resemblyzer with --no-deps to stop pip trying to compile webrtcvad.
+
+torch              # runs Resemblyzer's pretrained voice-encoder model
+scikit-learn       # clusters the voiceprints into distinct speakers
+librosa            # loads the audio at 16 kHz (timeline preserved)
+webrtcvad-wheels   # prebuilt webrtcvad (no C++ compiler needed on Windows)

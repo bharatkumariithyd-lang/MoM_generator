@@ -4,6 +4,9 @@
 # Generated output
 output/
 
+# Locally generated test audio (not needed in the repo)
+test_audio/
+
 # Python
 __pycache__/
 *.pyc
