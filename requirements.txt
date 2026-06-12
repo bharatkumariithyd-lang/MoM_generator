@@ -1,0 +1,7 @@
+# Minutes of Meeting Generator — dependencies
+# Install with:  pip install -r requirements.txt
+
+faster-whisper      # local, free speech-to-text (no API key)
+groq                # Groq API SDK for the LLM that structures the minutes
+python-docx         # creates the .docx Word document
+python-dotenv       # loads your GROQ_API_KEY from the .env file

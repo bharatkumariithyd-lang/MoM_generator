@@ -1,0 +1,13 @@
+# Secrets — never commit your real key
+.env
+
+# Generated output
+output/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Downloaded Whisper models cache
+models/
