@@ -168,17 +168,38 @@ def format_transcript(segments: list[Segment], with_speakers: bool = True) -> st
     """
     Build a single human-readable transcript string from the segments.
 
-    This is the text we will later hand to the Groq LLM. Including timestamps
-    and (approximate) speaker labels gives the model useful structure.
+    This is the text we later hand to the Groq LLM, and (with --save-transcript)
+    what we write to the .txt file. To keep it readable we GROUP consecutive
+    lines by the same speaker: the speaker label and that turn's timestamp are
+    printed once at the top of the block, then each line of the turn follows.
 
-    Example line:
-        [01:15] Speaker 2: Let's move the deadline to Friday.
+    Example:
+        [Speaker 1] (01:15)
+        Let's move the deadline to Friday.
+        And assign the final report to marketing.
+
+        [Speaker 2] (01:28)
+        That works for me.
     """
-    lines = []
+    if not segments:
+        return ""
+
+    lines: list[str] = []
+    current_speaker = None
+
     for seg in segments:
-        timestamp = _format_timestamp(seg.start)
         if with_speakers and seg.speaker:
-            lines.append(f"[{timestamp}] {seg.speaker}: {seg.text}")
+            # Start a new block whenever the speaker changes (and for the first).
+            if seg.speaker != current_speaker:
+                if lines:  # blank line between blocks, but not before the first
+                    lines.append("")
+                timestamp = _format_timestamp(seg.start)
+                lines.append(f"[{seg.speaker}] ({timestamp})")
+                current_speaker = seg.speaker
+            lines.append(seg.text)
         else:
+            # No speaker labels: keep it simple — one timestamped line per segment.
+            timestamp = _format_timestamp(seg.start)
             lines.append(f"[{timestamp}] {seg.text}")
+
     return "\n".join(lines)
