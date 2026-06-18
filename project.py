@@ -76,8 +76,10 @@ def parse_arguments():
     parser.add_argument(
         "--model",
         default="base",
-        choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper model size. Bigger = more accurate but slower.",
+        choices=["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
+        help="Whisper model size. Bigger = more accurate but slower. "
+             "'large-v3-turbo' is a distilled large-v3: similar accuracy, "
+             "much faster (handy when large-v3 is too slow on CPU).",
     )
     parser.add_argument(
         "--language",

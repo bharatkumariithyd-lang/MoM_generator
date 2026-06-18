@@ -45,7 +45,8 @@ def transcribe_audio(
         Path to the .mp3, .wav, or .m4a file.
     model_size : str
         Whisper model size. Bigger = more accurate but slower.
-        Options: "tiny", "base", "small", "medium", "large-v3".
+        Options: "tiny", "base", "small", "medium", "large-v3",
+        "large-v3-turbo" (distilled large-v3: similar accuracy, much faster).
         "base" is a good starting point on a normal laptop CPU.
     language : str | None
         Language code like "en". Leave as None to let Whisper auto-detect.

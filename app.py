@@ -70,9 +70,13 @@ with st.sidebar:
     # Whisper model size: bigger = more accurate but slower.
     model_size = st.selectbox(
         "Transcription model",
-        options=["tiny", "base", "small", "medium", "large-v3"],
+        options=["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
         index=1,  # default to "base"
-        help="Bigger models are more accurate but slower. 'base' is a good start.",
+        help=(
+            "Bigger models are more accurate but slower. 'base' is a good start. "
+            "'large-v3-turbo' is a distilled large-v3: similar accuracy, much "
+            "faster — handy when large-v3 feels too slow on CPU."
+        ),
     )
 
     # How to label who-said-what.

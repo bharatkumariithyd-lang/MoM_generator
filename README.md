@@ -68,7 +68,7 @@ The finished document appears in `output/meeting_MoM.docx`.
 | Option | Meaning | Example |
 |--------|---------|---------|
 | `--output` | Choose where to save the `.docx`. | `--output output/board.docx` |
-| `--model` | Whisper size: `tiny` `base` `small` `medium` `large-v3`. Bigger = more accurate but slower. | `--model small` |
+| `--model` | Whisper size: `tiny` `base` `small` `medium` `large-v3` `large-v3-turbo`. Bigger = more accurate but slower. | `--model small` |
 | `--language` | Force a language (else auto-detected). | `--language en` |
 | `--speakers` | Speaker labels: `pause` (default), `voice` (real recognition), or `none`. | `--speakers voice` |
 | `--num-speakers` | (voice mode) How many people are talking. Omit to auto-detect. | `--num-speakers 3` |
@@ -79,6 +79,20 @@ Example with several options:
 ```bash
 python project.py meeting.m4a --model small --language en --save-transcript
 ```
+
+#### About `large-v3-turbo`
+
+`large-v3-turbo` is a **distilled** version of `large-v3`: it keeps **similar
+transcription accuracy** but runs **roughly 8× faster**. It's the best choice
+when `large-v3` feels too slow on a CPU but you still want high accuracy on
+technical terms or accented speech.
+
+```bash
+python project.py meeting.mp3 --model large-v3-turbo
+```
+
+(The first run downloads the turbo model once and caches it under `models/`,
+just like the other sizes.)
 
 ---
 

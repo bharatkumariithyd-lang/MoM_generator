@@ -36,6 +36,9 @@ REPO_BY_SIZE = {
     "small": "Systran/faster-whisper-small",
     "medium": "Systran/faster-whisper-medium",
     "large-v3": "Systran/faster-whisper-large-v3",
+    # large-v3-turbo is a distilled large-v3 (similar accuracy, much faster).
+    # Note: it lives under a different org than the Systran models above.
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
 }
 
 # Files we try to download. The first three are required; the rest are
