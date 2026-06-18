@@ -35,6 +35,7 @@ def transcribe_audio(
     language: str | None = None,
     device: str = "cpu",
     compute_type: str = "int8",
+    hotwords: str | None = None,
 ):
     """
     Transcribe an audio file and return a list of Segment objects.
@@ -54,6 +55,11 @@ def transcribe_audio(
         "cpu" (works everywhere) or "cuda" (only if you have an NVIDIA GPU).
     compute_type : str
         "int8" is fast and light on CPU. Use "float16" on a GPU.
+    hotwords : str | None
+        Domain terms or names to bias the model toward (e.g. "lance, Furkan").
+        Useful for rare technical words the model otherwise mishears as a more
+        common look-alike (e.g. "lance" -> "lands"). Only list the stubborn
+        ones; you do not need to list every word.
 
     Returns
     -------
@@ -79,11 +85,15 @@ def transcribe_audio(
     # `segments` is a generator; `info` holds detected language etc.
     # vad_filter=True uses voice-activity detection to skip silent parts,
     # which improves both speed and quality.
+    # `hotwords` biases the decoder toward the listed terms across the whole
+    # audio, which is what rescues rare words like "lance" from being heard as
+    # the more common "lands". Passing None simply has no effect.
     segments_generator, info = model.transcribe(
         audio_path,
         language=language,
         vad_filter=True,
         beam_size=5,
+        hotwords=hotwords,
     )
 
     print(f"[transcriber] Detected language: {info.language} "

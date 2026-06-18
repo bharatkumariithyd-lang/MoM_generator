@@ -87,6 +87,16 @@ def parse_arguments():
         help="Language code like 'en'. Omit to auto-detect.",
     )
     parser.add_argument(
+        "--vocab",
+        default=None,
+        help=(
+            "Domain terms or names to bias transcription toward, e.g. "
+            "--vocab \"lance, Furkan, Dr. Ram Karan\". Fixes rare words the "
+            "model mishears as a common look-alike (e.g. 'lance' -> 'lands'). "
+            "Only list the stubborn ones, not every word."
+        ),
+    )
+    parser.add_argument(
         "--speakers",
         default="pause",
         choices=["pause", "voice", "none"],
@@ -177,6 +187,7 @@ def main():
         args.audio,
         model_size=args.model,
         language=args.language,
+        hotwords=args.vocab,
     )
     if not segments:
         sys.exit("ERROR: No speech was detected in the audio. Nothing to do.")
