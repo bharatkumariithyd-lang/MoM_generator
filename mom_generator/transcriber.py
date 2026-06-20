@@ -33,8 +33,8 @@ def transcribe_audio(
     audio_path: str,
     model_size: str = "base",
     language: str | None = None,
-    device: str = "cpu",
-    compute_type: str = "int8",
+    device: str = "auto",
+    compute_type: str = "auto",
     hotwords: str | None = None,
 ):
     """
@@ -52,9 +52,10 @@ def transcribe_audio(
     language : str | None
         Language code like "en". Leave as None to let Whisper auto-detect.
     device : str
-        "cpu" (works everywhere) or "cuda" (only if you have an NVIDIA GPU).
+        "auto" (default) uses "cuda" if an NVIDIA GPU is visible (e.g. a Colab
+        T4 — much faster), otherwise "cpu". Pass "cpu" or "cuda" to force one.
     compute_type : str
-        "int8" is fast and light on CPU. Use "float16" on a GPU.
+        "auto" (default) pairs with the device: "float16" on GPU, "int8" on CPU.
     hotwords : str | None
         Domain terms or names to bias the model toward (e.g. "lance, Furkan").
         Useful for rare technical words the model otherwise mishears as a more
@@ -69,7 +70,21 @@ def transcribe_audio(
     # module is cheap. The heavy faster-whisper import only happens when you
     # actually transcribe something.
     from faster_whisper import WhisperModel
+    import ctranslate2
     from .model_downloader import ensure_local_model
+
+    # Pick the fastest device we can. On a normal laptop this stays on CPU; on a
+    # machine with a visible NVIDIA GPU (e.g. a free Colab T4) it switches to
+    # CUDA + float16, which transcribes large-v3 roughly 20-40x faster. "auto"
+    # is the default; passing an explicit device/compute_type overrides it.
+    if device == "auto":
+        has_gpu = ctranslate2.get_cuda_device_count() > 0
+        device = "cuda" if has_gpu else "cpu"
+        if compute_type == "auto":
+            compute_type = "float16" if has_gpu else "int8"
+    elif compute_type == "auto":
+        compute_type = "int8"
+    print(f"[transcriber] Device: {device} (compute_type={compute_type}).")
 
     # Make sure the model files are available locally (downloading them with
     # retries if needed — see model_downloader.py for why). This returns a
@@ -83,17 +98,45 @@ def transcribe_audio(
 
     print(f"[transcriber] Transcribing: {audio_path}")
     # `segments` is a generator; `info` holds detected language etc.
-    # vad_filter=True uses voice-activity detection to skip silent parts,
-    # which improves both speed and quality.
+    #
     # `hotwords` biases the decoder toward the listed terms across the whole
     # audio, which is what rescues rare words like "lance" from being heard as
     # the more common "lands". Passing None simply has no effect.
+    #
+    # The remaining settings harden the decoder against HALLUCINATIONS — Whisper's
+    # habit of inventing fluent-sounding text over silence or noise (e.g. a
+    # garbled pre-meeting intro). None of them rewrite recognised words; they only
+    # configure how the decoder behaves, so there is no risk of inventing content
+    # (unlike a later LLM cleanup pass would have):
+    #   * condition_on_previous_text=True   — Whisper's default: feed each 30s
+    #     window the previous text so long monologues stay properly punctuated and
+    #     capitalised. (We tested False to curb snowballing repeats, but on real
+    #     meeting audio it made the text run-on/lowercase mid-utterance, so we
+    #     reverted to True — readability mattered more than the rare repeat.)
+    #   * word_timestamps=True              — required for the silence filter below;
+    #     also gives cleaner segment boundaries.
+    #   * hallucination_silence_threshold   — distrust/skip likely-invented text
+    #     that appears across silent gaps longer than this many seconds.
+    #   * initial_prompt                    — prime a formal meeting style so clean
+    #     speech transcribes with better punctuation and capitalisation.
+    #   * vad_parameters                    — trim dead air a little more eagerly
+    #     (lower min_silence) while keeping generous padding so we do NOT clip
+    #     quiet, one-word replies like "Yes." / "Yeah.".
     segments_generator, info = model.transcribe(
         audio_path,
         language=language,
-        vad_filter=True,
         beam_size=5,
         hotwords=hotwords,
+        condition_on_previous_text=True,
+        word_timestamps=True,
+        hallucination_silence_threshold=2.0,
+        initial_prompt="The following is a professional meeting transcript.",
+        vad_filter=True,
+        vad_parameters=dict(
+            threshold=0.5,
+            min_silence_duration_ms=500,
+            speech_pad_ms=400,
+        ),
     )
 
     print(f"[transcriber] Detected language: {info.language} "
