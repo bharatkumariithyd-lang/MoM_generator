@@ -16,3 +16,6 @@ __pycache__/
 models/
 streamlit.log
 *.log
+
+# Generated Colab upload bundle (rebuild with: python build_zip.py)
+MoM_generator.zip
