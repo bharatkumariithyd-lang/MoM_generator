@@ -96,9 +96,9 @@ def parse_arguments():
         default=None,
         help=(
             "Domain terms or names to bias transcription toward, e.g. "
-            "--vocab \"lance, Furkan, Dr. Ram Karan\". Fixes rare words the "
-            "model mishears as a common look-alike (e.g. 'lance' -> 'lands'). "
-            "Only list the stubborn ones, not every word."
+            "--vocab \"Acme, KPI, Aoife\". Fixes rare words the model mishears "
+            "as a more common look-alike. Only list the stubborn ones, not "
+            "every word."
         ),
     )
     parser.add_argument(

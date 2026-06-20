@@ -99,7 +99,7 @@ The finished document appears in `output/meeting_MoM.docx`.
 | `--speakers` | Speaker labels: `pause` (default), `voice` (Resemblyzer), `pyannote` (most accurate), or `none`. | `--speakers pyannote` |
 | `--num-speakers` | (`voice`/`pyannote`) How many people are talking. Omit to auto-detect. | `--num-speakers 4` |
 | `--speaker-names` | Put real names on detected speakers (run once to see the labels, then re-run). | `--speaker-names "Speaker 1=Bharat"` |
-| `--vocab` | Domain terms/names to bias transcription toward (fixes rare-word mishears). | `--vocab "lance, Furkan"` |
+| `--vocab` | Domain terms/names to bias transcription toward (fixes rare-word mishears). | `--vocab "Acme, KPI, Aoife"` |
 | `--save-transcript` | Also save the raw transcript as `.txt`. | `--save-transcript` |
 
 Example with several options:

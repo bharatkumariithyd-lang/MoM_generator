@@ -57,9 +57,9 @@ def transcribe_audio(
     compute_type : str
         "auto" (default) pairs with the device: "float16" on GPU, "int8" on CPU.
     hotwords : str | None
-        Domain terms or names to bias the model toward (e.g. "lance, Furkan").
-        Useful for rare technical words the model otherwise mishears as a more
-        common look-alike (e.g. "lance" -> "lands"). Only list the stubborn
+        Domain terms or names to bias the model toward (e.g. product names,
+        acronyms, or unusual personal names). Useful for rare words the model
+        otherwise mishears as a more common look-alike. Only list the stubborn
         ones; you do not need to list every word.
 
     Returns
@@ -100,8 +100,8 @@ def transcribe_audio(
     # `segments` is a generator; `info` holds detected language etc.
     #
     # `hotwords` biases the decoder toward the listed terms across the whole
-    # audio, which is what rescues rare words like "lance" from being heard as
-    # the more common "lands". Passing None simply has no effect.
+    # audio, which is what rescues a rare term from being heard as a more common
+    # look-alike word. Passing None simply has no effect.
     #
     # The remaining settings harden the decoder against HALLUCINATIONS — Whisper's
     # habit of inventing fluent-sounding text over silence or noise (e.g. a
