@@ -85,24 +85,27 @@ with st.sidebar:
         options=[
             "Rough guess from pauses (fast)",
             "Real voice recognition (slower, needs extras)",
+            "Accurate diarization with pyannote (best, needs HF token)",
             "No speaker labels",
         ],
         index=0,
         help=(
-            "Voice recognition needs the optional resemblyzer/torch extras "
-            "(see requirements-voice.txt)."
+            "Voice recognition needs the resemblyzer/torch extras "
+            "(requirements-voice.txt). pyannote is the most accurate option but "
+            "needs its extras AND a Hugging Face token (requirements-pyannote.txt)."
         ),
     )
     # Map the friendly label back to the internal mode the pipeline expects.
     speaker_mode = {
         "Rough guess from pauses (fast)": "pause",
         "Real voice recognition (slower, needs extras)": "voice",
+        "Accurate diarization with pyannote (best, needs HF token)": "pyannote",
         "No speaker labels": "none",
     }[speaker_choice]
 
-    # Only relevant for voice mode: how many people are talking.
+    # Relevant for both voice and pyannote modes: how many people are talking.
     num_speakers = None
-    if speaker_mode == "voice":
+    if speaker_mode in ("voice", "pyannote"):
         num_speakers = st.number_input(
             "Number of speakers (0 = auto-detect)",
             min_value=0,
@@ -111,6 +114,26 @@ with st.sidebar:
             help="Leave at 0 to let the system guess how many people spoke.",
         )
         num_speakers = num_speakers or None  # turn 0 into None (auto-detect)
+
+    # pyannote's models are gated, so it needs a Hugging Face token. Prefer the
+    # .env value; otherwise let the user paste one here (same pattern as the
+    # Groq key below). We stash it in the environment so the diarizer can read it.
+    if speaker_mode == "pyannote":
+        hf_env = os.getenv("HF_TOKEN")
+        if hf_env:
+            st.success("Hugging Face token loaded from .env ✓")
+        else:
+            hf_token = st.text_input(
+                "Hugging Face token",
+                type="password",
+                help=(
+                    "Accept the terms for pyannote/speaker-diarization-community-1, "
+                    "then create a token with public-gated-repo read access at "
+                    "huggingface.co/settings/tokens."
+                ),
+            ).strip()
+            if hf_token:
+                os.environ["HF_TOKEN"] = hf_token
 
     # Optional language hint. Empty = auto-detect.
     language = st.text_input(
@@ -186,6 +209,15 @@ def run_pipeline(audio_path: str, output_path: str):
             segments = assign_voice_speakers(segments, turns)
             use_speakers = True
             st.write("✓ Added speaker labels from real voice recognition.")
+        elif speaker_mode == "pyannote":
+            status.update(label="Step 2/4 · Diarizing speakers with pyannote...")
+            # Imported here so the page still loads without the heavy extras.
+            from mom_generator.diarizer import assign_voice_speakers
+            from mom_generator.diarizer_pyannote import diarize_audio_pyannote
+            turns = diarize_audio_pyannote(audio_path, num_speakers=num_speakers)
+            segments = assign_voice_speakers(segments, turns)
+            use_speakers = True
+            st.write("✓ Added speaker labels from pyannote diarization.")
         elif speaker_mode == "pause":
             status.update(label="Step 2/4 · Labeling speakers (rough guess)...")
             segments = assign_basic_speakers(segments)

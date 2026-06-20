@@ -99,12 +99,15 @@ def parse_arguments():
     parser.add_argument(
         "--speakers",
         default="pause",
-        choices=["pause", "voice", "none"],
+        choices=["pause", "voice", "pyannote", "none"],
         help=(
             "How to label speakers: "
             "'pause' = quick guess from silence gaps (fast, default); "
             "'voice' = real voice recognition with Resemblyzer (slower, needs "
             "the optional extras - see requirements-voice.txt); "
+            "'pyannote' = high-accuracy diarization with pyannote.audio (best, "
+            "needs the extras AND a Hugging Face token - see "
+            "requirements-pyannote.txt); "
             "'none' = no speaker labels."
         ),
     )
@@ -112,7 +115,7 @@ def parse_arguments():
         "--num-speakers",
         type=int,
         default=None,
-        help="(voice mode only) How many people are talking. Omit to auto-detect.",
+        help="(voice/pyannote modes) How many people are talking. Omit to auto-detect.",
     )
     # Deprecated alias kept so old commands still work; same as --speakers none.
     parser.add_argument(
@@ -202,6 +205,15 @@ def main():
         turns = diarize_audio(args.audio, num_speakers=args.num_speakers)
         segments = assign_voice_speakers(segments, turns)
         print("[project] Added speaker labels from real voice recognition.")
+        use_speakers = True
+    elif speaker_method == "pyannote":
+        # High-accuracy diarization. Produces the same speaker turns as the voice
+        # option, so the same assigner maps them onto the transcript.
+        from mom_generator.diarizer import assign_voice_speakers
+        from mom_generator.diarizer_pyannote import diarize_audio_pyannote
+        turns = diarize_audio_pyannote(args.audio, num_speakers=args.num_speakers)
+        segments = assign_voice_speakers(segments, turns)
+        print("[project] Added speaker labels from pyannote diarization.")
         use_speakers = True
     elif speaker_method == "pause":
         segments = assign_basic_speakers(segments)
