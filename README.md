@@ -140,7 +140,7 @@ uses the GPU too. See `colab_mom.ipynb` for a ready-made GPU setup.
 ## Project structure
 
 ```
-Experiment/
+MoM_generator/
 ├── project.py              # main entry point — run this
 ├── mom_generator/
 │   ├── __init__.py
