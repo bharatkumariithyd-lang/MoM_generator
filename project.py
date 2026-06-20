@@ -50,7 +50,12 @@ from mom_generator import (
     build_mom,
     export_to_docx,
 )
-from mom_generator.transcriber import assign_basic_speakers
+from mom_generator.transcriber import (
+    assign_basic_speakers,
+    speaker_samples,
+    parse_speaker_names,
+    rename_speakers,
+)
 
 
 # File types we accept. faster-whisper can handle these (and more), but we
@@ -116,6 +121,16 @@ def parse_arguments():
         type=int,
         default=None,
         help="(voice/pyannote modes) How many people are talking. Omit to auto-detect.",
+    )
+    parser.add_argument(
+        "--speaker-names",
+        default=None,
+        help=(
+            "Map detected speakers to real names, e.g. --speaker-names "
+            "\"Speaker 1=Bharat, Speaker 2=Dr. Rao\". The detected labels (with a "
+            "sample line each) are printed after diarization, so run once to see "
+            "them, then re-run with this flag to put real names in the minutes."
+        ),
     )
     # Deprecated alias kept so old commands still work; same as --speakers none.
     parser.add_argument(
@@ -222,6 +237,20 @@ def main():
         use_speakers = True
     else:  # "none"
         use_speakers = False
+
+    # Show which speakers were detected (with a sample line) and, if the user
+    # supplied --speaker-names, replace the anonymous "Speaker N" labels with the
+    # real names everywhere downstream (the transcript and the minutes).
+    if use_speakers:
+        for label, sample in speaker_samples(segments).items():
+            print(f"[project]   {label}: \"{sample}\"")
+        name_map = parse_speaker_names(args.speaker_names)
+        if name_map:
+            rename_speakers(segments, name_map)
+            print(f"[project] Applied speaker names: {name_map}")
+        elif speaker_method in ("voice", "pyannote"):
+            print('[project] Tip: re-run with --speaker-names '
+                  '"Speaker 1=Name, ..." to use real names in the minutes.')
 
     transcript = format_transcript(segments, with_speakers=use_speakers)
 

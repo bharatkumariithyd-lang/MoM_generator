@@ -98,6 +98,7 @@ The finished document appears in `output/meeting_MoM.docx`.
 | `--language` | Force a language (else auto-detected). | `--language en` |
 | `--speakers` | Speaker labels: `pause` (default), `voice` (Resemblyzer), `pyannote` (most accurate), or `none`. | `--speakers pyannote` |
 | `--num-speakers` | (`voice`/`pyannote`) How many people are talking. Omit to auto-detect. | `--num-speakers 4` |
+| `--speaker-names` | Put real names on detected speakers (run once to see the labels, then re-run). | `--speaker-names "Speaker 1=Bharat"` |
 | `--vocab` | Domain terms/names to bias transcription toward (fixes rare-word mishears). | `--vocab "lance, Furkan"` |
 | `--save-transcript` | Also save the raw transcript as `.txt`. | `--save-transcript` |
 
@@ -226,3 +227,20 @@ python project.py meeting.mp3 --speakers pyannote --num-speakers 4
 Inference is local (only the model download needs the internet/token). Slow on
 CPU, fast on GPU. It lives in `mom_generator/diarizer_pyannote.py` and reuses the
 same speaker-assignment as the voice option, so the output format is identical.
+
+### Putting real names on the speakers
+
+Diarization can tell the voices apart but not *who* they are, so it labels them
+`Speaker 1`, `Speaker 2`, … You can replace those with real names so the minutes
+list real attendees and attribute action items correctly.
+
+- **CLI:** run once to see the detected labels (each printed with a sample line),
+  then re-run with `--speaker-names`:
+
+  ```bash
+  python project.py meeting.mp3 --speakers pyannote --speaker-names "Speaker 1=Bharat, Speaker 2=Dr. Rao"
+  ```
+
+- **Web UI:** click **1 · Transcribe & detect speakers**, type a name next to each
+  detected speaker (a sample line is shown so you know who's who), then click
+  **2 · Generate minutes**. Transcription is not repeated between the two steps.

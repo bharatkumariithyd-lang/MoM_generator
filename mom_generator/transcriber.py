@@ -256,3 +256,69 @@ def format_transcript(segments: list[Segment], with_speakers: bool = True) -> st
             lines.append(f"[{timestamp}] {seg.text}")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Speaker NAMING — turn the anonymous "Speaker 1/2/3" labels diarization gives
+# us into the real people's names. Diarization can tell voices apart but has no
+# way to know *who* each voice is, so a human supplies the mapping (in the CLI
+# via --speaker-names, or in the web UI via text boxes). These three helpers are
+# shared by both front-ends.
+# ---------------------------------------------------------------------------
+def speaker_samples(segments: list[Segment], max_chars: int = 90) -> dict:
+    """
+    Return ``{speaker_label: a short sample line}`` so a human can tell which
+    detected speaker is who before naming them.
+
+    For each speaker we keep their first line, but upgrade to a longer one if the
+    first was very short (so the sample isn't just "Yes."). Order follows first
+    appearance in the meeting.
+    """
+    samples: dict[str, str] = {}
+    for seg in segments:
+        speaker, text = seg.speaker, seg.text.strip()
+        if not speaker or not text:
+            continue
+        if speaker not in samples or (
+            len(samples[speaker]) < 15 and len(text) > len(samples[speaker])
+        ):
+            samples[speaker] = text
+    return {
+        label: (text[:max_chars] + ("…" if len(text) > max_chars else ""))
+        for label, text in samples.items()
+    }
+
+
+def parse_speaker_names(spec: str | None) -> dict:
+    """
+    Parse a CLI mapping like ``"Speaker 1=Bharat, Speaker 2=Dr. Rao"`` into
+    ``{"Speaker 1": "Bharat", "Speaker 2": "Dr. Rao"}``.
+
+    Splits on commas between pairs and on the FIRST ``=`` within a pair (so names
+    may contain ``=`` if ever needed). Blank or malformed pieces are ignored.
+    """
+    mapping: dict[str, str] = {}
+    if not spec:
+        return mapping
+    for pair in spec.split(","):
+        if "=" not in pair:
+            continue
+        label, name = pair.split("=", 1)
+        label, name = label.strip(), name.strip()
+        if label and name:
+            mapping[label] = name
+    return mapping
+
+
+def rename_speakers(segments: list[Segment], name_map: dict) -> list[Segment]:
+    """
+    Replace each segment's ``.speaker`` using ``name_map`` (e.g.
+    ``{"Speaker 1": "Bharat"}``). Labels not in the map keep their original value,
+    so a partial mapping is fine. Returns the same list, mutated in place.
+    """
+    if not name_map:
+        return segments
+    for seg in segments:
+        if seg.speaker in name_map:
+            seg.speaker = name_map[seg.speaker]
+    return segments

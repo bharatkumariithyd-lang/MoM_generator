@@ -35,7 +35,11 @@ from mom_generator import (
     build_mom,
     export_to_docx,
 )
-from mom_generator.transcriber import assign_basic_speakers
+from mom_generator.transcriber import (
+    assign_basic_speakers,
+    speaker_samples,
+    rename_speakers,
+)
 
 
 # Load GROQ_API_KEY from a .env file (if present) into the environment, just
@@ -171,38 +175,24 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     st.audio(uploaded_file)
 
-generate_clicked = st.button(
-    "✨ Generate Minutes",
-    type="primary",
-    disabled=(uploaded_file is None),
-    use_container_width=True,
-)
-
-
-def run_pipeline(audio_path: str, output_path: str):
+def _transcribe_and_detect(audio_path: str):
     """
-    Run the four pipeline steps and report progress in the UI.
+    STEP 1 (the slow part): transcribe the audio and, if asked, detect speakers.
 
-    This is the web equivalent of main() in project.py. It returns the
-    structured `mom` dict so we can preview it on the page afterwards.
+    Returns (segments, use_speakers), or None if no speech was found. We run this
+    on its own and cache the result so the speaker-naming + LLM step can run
+    afterwards WITHOUT re-transcribing.
     """
-    # st.status gives a collapsible progress box with a spinner. We update its
-    # label as each step finishes so the user can see what's happening — handy
-    # because transcription can take a while and a frozen page looks broken.
-    with st.status("Working on your minutes...", expanded=True) as status:
-
-        # --- Step 1: Transcribe ------------------------------------------
-        status.update(label="Step 1/4 · Transcribing audio (this can take a while)...")
+    with st.status("Transcribing & detecting speakers...", expanded=True) as status:
+        status.update(label="Transcribing audio (this can take a while)...")
         segments = transcribe_audio(audio_path, model_size=model_size, language=language)
         if not segments:
             status.update(label="No speech detected.", state="error")
-            st.error("No speech was detected in the audio. Nothing to do.")
             return None
         st.write(f"✓ Transcribed {len(segments)} segments.")
 
-        # --- Step 2: Speaker labels (optional) ---------------------------
         if speaker_mode == "voice":
-            status.update(label="Step 2/4 · Recognizing speakers by voice...")
+            status.update(label="Recognizing speakers by voice...")
             # Imported here so the page still loads without the heavy extras.
             from mom_generator.diarizer import diarize_audio, assign_voice_speakers
             turns = diarize_audio(audio_path, num_speakers=num_speakers)
@@ -210,8 +200,7 @@ def run_pipeline(audio_path: str, output_path: str):
             use_speakers = True
             st.write("✓ Added speaker labels from real voice recognition.")
         elif speaker_mode == "pyannote":
-            status.update(label="Step 2/4 · Diarizing speakers with pyannote...")
-            # Imported here so the page still loads without the heavy extras.
+            status.update(label="Diarizing speakers with pyannote...")
             from mom_generator.diarizer import assign_voice_speakers
             from mom_generator.diarizer_pyannote import diarize_audio_pyannote
             turns = diarize_audio_pyannote(audio_path, num_speakers=num_speakers)
@@ -219,7 +208,7 @@ def run_pipeline(audio_path: str, output_path: str):
             use_speakers = True
             st.write("✓ Added speaker labels from pyannote diarization.")
         elif speaker_mode == "pause":
-            status.update(label="Step 2/4 · Labeling speakers (rough guess)...")
+            status.update(label="Labeling speakers (rough guess)...")
             segments = assign_basic_speakers(segments)
             use_speakers = True
             st.write("✓ Added approximate speaker labels.")
@@ -227,20 +216,31 @@ def run_pipeline(audio_path: str, output_path: str):
             use_speakers = False
             st.write("• Skipping speaker labels.")
 
-        transcript = format_transcript(segments, with_speakers=use_speakers)
+        status.update(label="Done — name the speakers (optional), then generate.",
+                      state="complete")
+    return segments, use_speakers
 
-        # --- Step 3: Build structured minutes with Groq ------------------
-        status.update(label="Step 3/4 · Structuring minutes with the LLM...")
+
+def _build_minutes(segments, use_speakers, name_map, output_path):
+    """
+    STEP 2: apply the speaker name_map, structure the minutes with the LLM, and
+    write the .docx. Works on a COPY of the cached segments, so re-generating with
+    different names always starts from the original "Speaker N" labels.
+    """
+    import copy
+    segs = copy.deepcopy(segments)
+    if use_speakers and name_map:
+        rename_speakers(segs, name_map)
+    transcript = format_transcript(segs, with_speakers=use_speakers)
+
+    with st.status("Structuring the minutes...", expanded=True) as status:
+        status.update(label="Structuring minutes with the LLM...")
         mom = build_mom(transcript, api_key=api_key)
         st.write("✓ Minutes structured.")
-
-        # --- Step 4: Write the .docx -------------------------------------
-        status.update(label="Step 4/4 · Writing the Word document...")
+        status.update(label="Writing the Word document...")
         export_to_docx(mom, output_path)
         st.write("✓ Word document created.")
-
         status.update(label="Done! 🎉", state="complete")
-
     return mom
 
 
@@ -282,52 +282,93 @@ def show_preview(mom: dict):
 
 
 # ---------------------------------------------------------------------------
-# When the button is clicked: validate, run, then offer a download.
+# Two-step flow:
+#   1) Transcribe + detect speakers (the slow part; cached in session_state)
+#   2) Name the speakers (optional), then generate the minutes
+# Splitting it lets you label "Speaker 1/2" with real names BEFORE the minutes
+# are written, and without paying for transcription twice.
 # ---------------------------------------------------------------------------
-if generate_clicked:
-    if not api_key:
-        st.error(
-            "No Groq API key. Paste one in the sidebar, or add GROQ_API_KEY to "
-            "a .env file. Get a free key at https://console.groq.com/keys"
-        )
-        st.stop()
-
-    # Streamlit hands us the upload as in-memory bytes, but the pipeline works
-    # on file *paths*. So we write the upload to a temporary file on disk and
-    # point the pipeline at that. The temp file is cleaned up at the end.
+if st.button(
+    "1 · Transcribe & detect speakers",
+    type="primary",
+    disabled=(uploaded_file is None),
+    use_container_width=True,
+):
+    # Write the upload to a temp file (the pipeline works on paths), transcribe +
+    # diarize, cache the result, then delete the temp file — step 2 needs only
+    # the segments, not the audio.
     suffix = os.path.splitext(uploaded_file.name)[1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(uploaded_file.getbuffer())
         temp_audio_path = tmp.name
-
-    base_name = os.path.splitext(uploaded_file.name)[0]
-    os.makedirs("output", exist_ok=True)
-    output_path = os.path.join("output", f"{base_name}_MoM.docx")
-
     try:
-        mom = run_pipeline(temp_audio_path, output_path)
+        result = _transcribe_and_detect(temp_audio_path)
     except Exception as exc:  # noqa: BLE001 - surface any failure to the user
-        st.error(f"Something went wrong: {exc}")
-        mom = None
+        st.error(f"Something went wrong while transcribing: {exc}")
+        result = None
     finally:
-        # Clean up the temporary audio file no matter what happened.
         if os.path.exists(temp_audio_path):
             os.remove(temp_audio_path)
 
-    if mom:
-        st.success(f"Minutes saved to: {output_path}")
+    if result is None:
+        st.session_state.pop("detected", None)
+        st.error("No speech was detected in the audio. Nothing to do.")
+    else:
+        segments, use_speakers = result
+        st.session_state["detected"] = {
+            "segments": segments,
+            "use_speakers": use_speakers,
+            "samples": speaker_samples(segments) if use_speakers else {},
+            "base_name": os.path.splitext(uploaded_file.name)[0],
+        }
 
-        # Read the finished .docx back as bytes so the browser can download it.
-        with open(output_path, "rb") as f:
-            docx_bytes = f.read()
-        st.download_button(
-            label="⬇️ Download minutes (.docx)",
-            data=docx_bytes,
-            file_name=f"{base_name}_MoM.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True,
-        )
-
+# Once we have a cached detection, offer optional speaker naming + the generate
+# button. This block re-renders on every interaction (e.g. typing a name).
+detected = st.session_state.get("detected")
+if detected:
+    name_map = {}
+    if detected["use_speakers"] and detected["samples"]:
         st.divider()
-        st.caption("Preview")
-        show_preview(mom)
+        st.subheader("Name the speakers (optional)")
+        st.caption(
+            "Diarization tells the voices apart but not who they are. Add real "
+            "names to use them in the minutes; leave blank to keep the labels."
+        )
+        for label, sample in detected["samples"].items():
+            value = st.text_input(
+                f'{label} — said: "{sample}"', key=f"name_{label}"
+            ).strip()
+            if value:
+                name_map[label] = value
+
+    if st.button("2 · Generate minutes", type="primary", use_container_width=True):
+        if not api_key:
+            st.error(
+                "No Groq API key. Paste one in the sidebar, or add GROQ_API_KEY "
+                "to a .env file. Get a free key at https://console.groq.com/keys"
+            )
+            st.stop()
+        os.makedirs("output", exist_ok=True)
+        output_path = os.path.join("output", f"{detected['base_name']}_MoM.docx")
+        try:
+            mom = _build_minutes(
+                detected["segments"], detected["use_speakers"], name_map, output_path
+            )
+        except Exception as exc:  # noqa: BLE001 - surface any failure to the user
+            st.error(f"Something went wrong: {exc}")
+            mom = None
+
+        if mom:
+            st.success(f"Minutes saved to: {output_path}")
+            with open(output_path, "rb") as f:
+                docx_bytes = f.read()
+            st.download_button(
+                label="⬇️ Download minutes (.docx)",
+                data=docx_bytes,
+                file_name=f"{detected['base_name']}_MoM.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+            )
+            st.divider()
+            st.caption("Preview")
+            show_preview(mom)
