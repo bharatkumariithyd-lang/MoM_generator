@@ -39,14 +39,14 @@ Return ONLY a valid JSON object with EXACTLY these keys:
 {
   "meeting_title": "string - a short inferred title for the meeting",
   "date_time": "string - the date/time if clearly mentioned, else empty string",
-  "attendees": ["list of attendee names or roles mentioned, else empty list"],
-  "agenda_items": ["list of agenda / topics that were meant to be covered"],
-  "key_discussion_points": ["list of the main points discussed"],
-  "decisions_made": ["list of concrete decisions the group agreed on"],
+  "attendees": ["people who ACTUALLY PARTICIPATED (spoke, or are addressed as present). Do NOT include people who are only talked ABOUT - absent colleagues, third parties, names merely mentioned. Real names if stated, else roles. Empty list if unclear."],
+  "agenda_items": ["the meeting's main topics as short headings. If no formal agenda was announced, infer 2-5 high-level topic headings from the discussion (these summarise; key_discussion_points hold the detail)"],
+  "key_discussion_points": ["EVERY distinct substantive point discussed - be thorough and specific; do not collapse several different points into one generic bullet"],
+  "decisions_made": ["EVERY concrete decision or agreement reached - list each separately, including conditional or partial agreements"],
   "action_items": [
     {
       "task": "string - what needs to be done",
-      "owner": "string - who is responsible, or empty string if not said",
+      "owner": "string - who is responsible, ONLY if the transcript clearly states it; otherwise empty string. Do NOT guess.",
       "deadline": "string - due date if mentioned, or empty string"
     }
   ],
@@ -92,13 +92,20 @@ def _build_prompt(transcript: str, part_info: tuple | None = None) -> str:
 professional Minutes of Meeting from raw meeting transcripts.
 
 The transcript below was produced by automatic speech-to-text, so it may
-contain small errors. Speaker labels (e.g. "Speaker 1") are approximate guesses
-based on pauses, NOT verified identities — use them only as a loose hint and
-prefer real names if people introduce themselves in the text.
+contain small errors. Speaker labels (e.g. "Speaker 1") indicate distinct
+speaking turns and are a hint to how many people took part, but they are NOT
+verified identities. Where the text names someone or they introduce themselves,
+use the real name.
 
 {part_note}Rules:
 - Base everything ONLY on what is actually in the transcript. Do not invent
   attendees, dates, decisions, or action items.
+- ATTENDEES are only the people actually present/speaking — never list someone
+  just because they are mentioned or discussed by others.
+- Be THOROUGH on discussion points and decisions: capture every distinct one
+  rather than compressing the meeting into a few generic bullets.
+- Do NOT guess action-item owners or deadlines; leave them empty unless the
+  transcript clearly states them.
 - If something is not mentioned, use an empty string "" or an empty list [].
 - Keep each point concise and written in clear, professional English.
 
