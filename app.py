@@ -75,11 +75,12 @@ with st.sidebar:
     model_size = st.selectbox(
         "Transcription model",
         options=["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
-        index=1,  # default to "base"
+        index=4,  # default to the full "large-v3"
         help=(
-            "Bigger models are more accurate but slower. 'base' is a good start. "
-            "'large-v3-turbo' is a distilled large-v3: similar accuracy, much "
-            "faster — handy when large-v3 feels too slow on CPU."
+            "Defaults to 'large-v3', the full (non-distilled) model — this tool "
+            "is built for a GPU, where that is both affordable and the most "
+            "accurate. 'large-v3-turbo' is distilled: much faster but weaker, "
+            "worth it only on a CPU."
         ),
     )
 
@@ -139,12 +140,21 @@ with st.sidebar:
             if hf_token:
                 os.environ["HF_TOKEN"] = hf_token
 
-    # Optional language hint. Empty = auto-detect.
+    # Language. Defaults to English on purpose: Whisper picks a language ONCE
+    # from the first 30 seconds and keeps it for the whole file, so a Hindi
+    # greeting would otherwise drag an entire English meeting into Hindi.
     language = st.text_input(
-        "Language code (optional)",
-        value="",
-        help="Like 'en' for English. Leave blank to auto-detect.",
+        "Language code",
+        value="en",
+        help=(
+            "Defaults to 'en', which is what you want for meetings that are "
+            "mostly English with a little Hindi mixed in. Clear the box, or type "
+            "'auto', to let Whisper detect the language instead - only worth it "
+            "when the Hindi carries actual decisions rather than small talk."
+        ),
     ).strip() or None
+    if language and language.lower() == "auto":
+        language = None
 
     st.divider()
 

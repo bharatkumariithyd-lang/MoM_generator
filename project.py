@@ -29,9 +29,16 @@ HOW TO USE
        python project.py meeting.wav --speakers voice          (real voice recognition)
        python project.py meeting.wav --speakers voice --num-speakers 3
        python project.py meeting.wav --speakers none
-       python project.py meeting.mp3 --language en
+       python project.py meeting.mp3 --language auto  (let Whisper detect the
+                                                        language - see below)
 
-The finished .docx lands in the "output/" folder by default.
+The finished .docx lands in the "output/" folder by default. The pipeline is
+tuned for Indian workplace meetings that are mostly English with a little Hindi
+mixed in, so it transcribes as English by default (--language en). Whisper picks
+a language ONCE from the first 30 seconds and keeps it for the whole file, so a
+Hindi greeting at the start otherwise drags the whole meeting into Hindi. The
+minutes-writing step still expects and correctly interprets the Hindi words that
+make it into the transcript.
 """
 
 import argparse
@@ -80,16 +87,24 @@ def parse_arguments():
     )
     parser.add_argument(
         "--model",
-        default="base",
+        default="large-v3",
         choices=["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
-        help="Whisper model size. Bigger = more accurate but slower. "
-             "'large-v3-turbo' is a distilled large-v3: similar accuracy, "
-             "much faster (handy when large-v3 is too slow on CPU).",
+        help="Whisper model size. Defaults to 'large-v3', the full "
+             "(non-distilled) model: this pipeline is built to run on a GPU, "
+             "where large-v3 is affordable and the most accurate option. "
+             "'large-v3-turbo' is a distilled large-v3 - much faster but "
+             "measurably weaker, a CPU fallback rather than the target.",
     )
     parser.add_argument(
         "--language",
-        default=None,
-        help="Language code like 'en'. Omit to auto-detect.",
+        default="en",
+        help=(
+            "Language code. Defaults to 'en', which is what you want for Indian "
+            "meetings that are mostly English with a little Hindi: Whisper locks "
+            "onto ONE language from the first 30 seconds, so auto-detecting on a "
+            "Hindi opening mangles the rest of the meeting. Pass 'auto' to "
+            "auto-detect anyway - only worth it when Hindi carries decisions."
+        ),
     )
     parser.add_argument(
         "--vocab",
@@ -142,6 +157,15 @@ def parse_arguments():
         "--save-transcript",
         action="store_true",
         help="Also save the raw transcript as a .txt file next to the .docx.",
+    )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help=(
+            "(Long meetings) Write the minutes even if part of the transcript "
+            "could not be processed. Off by default: incomplete minutes look "
+            "exactly like complete ones, so the run stops instead."
+        ),
     )
     return parser.parse_args()
 
@@ -200,11 +224,16 @@ def main():
     print(" Minutes of Meeting Generator")
     print("=" * 60)
 
+    # Whisper locks onto ONE language from the first 30 seconds and keeps it for
+    # the whole file, so we default to English rather than let a Hindi greeting
+    # decide the hour. "auto" is the escape hatch back to Whisper's detection.
+    language = None if args.language.lower() == "auto" else args.language
+
     # --- Step 1: Transcribe ----------------------------------------------
     segments = transcribe_audio(
         args.audio,
         model_size=args.model,
-        language=args.language,
+        language=language,
         hotwords=args.vocab,
     )
     if not segments:
@@ -262,7 +291,7 @@ def main():
         print(f"[project] Transcript saved to: {transcript_path}")
 
     # --- Step 3: Build structured minutes with Groq ----------------------
-    mom = build_mom(transcript)
+    mom = build_mom(transcript, allow_partial=args.allow_partial)
 
     # --- Step 4: Write the .docx -----------------------------------------
     export_to_docx(mom, output_path)

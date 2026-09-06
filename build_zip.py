@@ -14,7 +14,8 @@ import os
 import zipfile
 
 OUTPUT = "MoM_generator.zip"
-TOP_FILES = ["project.py", "requirements.txt", "requirements-voice.txt"]
+TOP_FILES = ["project.py", "requirements.txt", "requirements-voice.txt",
+             "requirements-pyannote.txt"]
 PACKAGE = "mom_generator"
 
 

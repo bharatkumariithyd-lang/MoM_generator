@@ -31,8 +31,8 @@ class Segment:
 
 def transcribe_audio(
     audio_path: str,
-    model_size: str = "base",
-    language: str | None = None,
+    model_size: str = "large-v3",
+    language: str | None = "en",
     device: str = "auto",
     compute_type: str = "auto",
     hotwords: str | None = None,
@@ -45,12 +45,20 @@ def transcribe_audio(
     audio_path : str
         Path to the .mp3, .wav, or .m4a file.
     model_size : str
-        Whisper model size. Bigger = more accurate but slower.
-        Options: "tiny", "base", "small", "medium", "large-v3",
-        "large-v3-turbo" (distilled large-v3: similar accuracy, much faster).
-        "base" is a good starting point on a normal laptop CPU.
+        Whisper model size. Defaults to "large-v3" — the full, non-distilled
+        model. This pipeline targets a GPU, where large-v3 is affordable and is
+        the most accurate option available. Also valid: "tiny", "base", "small",
+        "medium", and "large-v3-turbo" (a distilled large-v3 — much faster but
+        measurably weaker, worth it only when you are stuck on a CPU).
     language : str | None
-        Language code like "en". Leave as None to let Whisper auto-detect.
+        Language code. Defaults to "en", and that default is deliberate. Whisper
+        detects the language only ONCE, from the first 30 seconds, then locks it
+        for the whole file. These are Indian workplace meetings that open with
+        Hindi small talk, so auto-detect locks the entire hour to Hindi: measured
+        on a real 10-minute clip that lost roughly half the content (1091 words
+        vs 2077) and wrote English speech in Devanagari letters. Pass None to
+        auto-detect instead — worth it only when Hindi carries real decisions
+        rather than pleasantries.
     device : str
         "auto" (default) uses "cuda" if an NVIDIA GPU is visible (e.g. a Colab
         T4 — much faster), otherwise "cpu". Pass "cpu" or "cuda" to force one.
@@ -86,6 +94,15 @@ def transcribe_audio(
         compute_type = "int8"
     print(f"[transcriber] Device: {device} (compute_type={compute_type}).")
 
+    # This pipeline is built for a GPU. Measured on a laptop CPU, the *distilled*
+    # large-v3-turbo took ~5.5 minutes on a 10-minute clip; full large-v3 is
+    # several times slower again. Say so up front rather than silently spending
+    # hours on an hour-long meeting.
+    if device == "cpu" and model_size.startswith("large"):
+        print(f"[transcriber] WARNING: '{model_size}' on CPU is very slow — "
+              f"expect hours for a long meeting. Use a GPU if you can; "
+              f"'--model small' is the sensible CPU fallback.")
+
     # Make sure the model files are available locally (downloading them with
     # retries if needed — see model_downloader.py for why). This returns a
     # local folder path that we then load the model from.
@@ -118,7 +135,13 @@ def transcribe_audio(
     #   * hallucination_silence_threshold   — distrust/skip likely-invented text
     #     that appears across silent gaps longer than this many seconds.
     #   * initial_prompt                    — prime a formal meeting style so clean
-    #     speech transcribes with better punctuation and capitalisation.
+    #     speech transcribes with better punctuation and capitalisation. Kept
+    #     deliberately STYLE-ONLY: it describes how the text should be written
+    #     down, never what was said, so it cannot bias the content. (An earlier
+    #     version also told the model to expect Hindi. That was a claim about
+    #     content, and it barely acted anyway: Whisper keeps only the last ~223
+    #     prompt tokens, so a seeded prompt stops steering the decode after
+    #     roughly a minute of speech.)
     #   * vad_parameters                    — trim dead air a little more eagerly
     #     (lower min_silence) while keeping generous padding so we do NOT clip
     #     quiet, one-word replies like "Yes." / "Yeah.".

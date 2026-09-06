@@ -15,7 +15,7 @@ Word document — automatically.
 |------|--------------|-----------|
 | 1. Transcribe | The audio is converted to text **on your machine** (free, no API key). | `faster-whisper` |
 | 2. Speaker labels | A quick guess from pauses, **real voice recognition**, or **high-accuracy diarization**. | (heuristic) / `resemblyzer` / `pyannote.audio` |
-| 3. Structure | The transcript is sent to an LLM that extracts title, attendees, decisions, action items, etc. | `groq` (`llama-3.3-70b-versatile`) |
+| 3. Structure | The transcript is sent to an LLM that extracts title, attendees, decisions, action items, etc. | `groq` (`openai/gpt-oss-120b`) |
 | 4. Export | Everything is written into a formatted Word file. | `python-docx` |
 
 > **Three ways to label speakers** (each is *added*, not a replacement — pick per run):
@@ -94,32 +94,50 @@ The finished document appears in `output/meeting_MoM.docx`.
 | Option | Meaning | Example |
 |--------|---------|---------|
 | `--output` | Choose where to save the `.docx`. | `--output output/board.docx` |
-| `--model` | Whisper size: `tiny` `base` `small` `medium` `large-v3` `large-v3-turbo`. Bigger = more accurate but slower. | `--model small` |
-| `--language` | Force a language (else auto-detected). | `--language en` |
+| `--model` | Whisper size. Default `large-v3` (full model — this tool targets a GPU). Also `tiny` `base` `small` `medium` `large-v3-turbo`. | `--model large-v3-turbo` |
+| `--language` | Transcription language, default `en` — see the note below. Pass `auto` to let Whisper detect it. | `--language auto` |
 | `--speakers` | Speaker labels: `pause` (default), `voice` (Resemblyzer), `pyannote` (most accurate), or `none`. | `--speakers pyannote` |
 | `--num-speakers` | (`voice`/`pyannote`) How many people are talking. Omit to auto-detect. | `--num-speakers 4` |
 | `--speaker-names` | Put real names on detected speakers (run once to see the labels, then re-run). | `--speaker-names "Speaker 1=Bharat"` |
 | `--vocab` | Domain terms/names to bias transcription toward (fixes rare-word mishears). | `--vocab "Acme, KPI, Aoife"` |
 | `--save-transcript` | Also save the raw transcript as `.txt`. | `--save-transcript` |
+| `--allow-partial` | (Long meetings) Write the minutes even if part of the transcript could not be processed. Off by default — incomplete minutes look exactly like complete ones, so the run stops instead. | `--allow-partial` |
 
 Example with several options:
 
 ```bash
-python project.py meeting.m4a --model small --language en --save-transcript
+python project.py meeting.m4a --model small --save-transcript
 ```
+
+> **Hindi/English ("Hinglish") meetings:** the pipeline is tuned for Indian
+> workplace meetings that are mostly English with a little Hindi mixed in, so it
+> transcribes as English by default (`--language en`). That matters more than it
+> sounds: Whisper picks a language **once**, from the first 30 seconds, and keeps
+> it for the whole file — so a Hindi greeting drags the entire meeting into
+> Hindi. On a real 10-minute clip that cost roughly half the content (1091 words
+> vs 2077) and wrote English speech in Devanagari letters. The Hindi that
+> survives into an English transcript is mostly small talk, and the
+> minutes-writing prompt reads it correctly either way.
+>
+> Pass `--language auto` when the Hindi carries actual decisions rather than
+> pleasantries: you get a messier transcript, but you keep that content.
 
 #### About `large-v3-turbo`
 
-`large-v3-turbo` is a **distilled** version of `large-v3`: it keeps **similar
-transcription accuracy** but runs **roughly 8× faster**. It's the best choice
-when `large-v3` feels too slow on a CPU but you still want high accuracy on
-technical terms or accented speech.
+`large-v3-turbo` is a **distilled** version of `large-v3`: it cuts the decoder
+from 32 layers to 4, so it runs **roughly 8× faster**. It stays close to
+`large-v3` on clean English, but it is a genuinely smaller decoder and the gap
+widens on accented speech and noisy multi-speaker rooms — which is exactly the
+audio this project handles.
+
+This pipeline is built to run on a **GPU**, where the full model is affordable,
+so `large-v3` is the default and turbo is the fallback for CPU-only machines:
 
 ```bash
-python project.py meeting.mp3 --model large-v3-turbo
+python project.py meeting.mp3 --model large-v3-turbo   # CPU fallback
 ```
 
-(The first run downloads the turbo model once and caches it under `models/`,
+(The first run downloads the model once and caches it under `models/`,
 just like the other sizes.)
 
 #### Running on a GPU
